@@ -31,16 +31,9 @@ struct callback_struct {
   char *routermac;
 };
 
-void create_firewall_entry(char *attackermac) {
-  char buffer[MAXLEN];
-  sprintf(buffer, "iptables -A INPUT -m mac --mac-source");
-  // sprintf(cmd,"sendmail %s < %s", to, "mail"); // prepare command.
-}
-
 void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, const u_char *packet) {
   char str[INET_ADDRSTRLEN];
   char macStr[18];
-  static int flag = 1;
 
   struct ether_header *ethernet      = (struct ether_header *) packet;
   struct arp_header   *arp           = (struct arp_header *) (packet + ETHER_LEN);
