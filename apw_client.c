@@ -4,6 +4,7 @@
 #include <pcap.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,6 +14,9 @@
 #define MAXLEN    1024
 #define ETHER_LEN 14
 #define EVENT_SIZE (sizeof (struct inotify_event))
+
+size_t monitor_count = 0;
+size_t threshold     = 0;
 
 struct arp_header {
   uint16_t htype;
@@ -31,6 +35,63 @@ struct callback_struct {
   char *routermac;
 };
 
+void* decrement_monitor_count() {
+  while(1) {
+    sleep(3);
+    if (monitor_count > 0) {
+      --monitor_count;
+    }
+  }
+  return NULL;
+}
+
+void* configuration_interface() {
+  int sd, new_sd, port, n, bytes_to_read;
+  char buf[MAXLEN], *bp;
+  struct sockaddr_in client_interface, server_interface;
+  socklen_t server_i_len;
+
+  port = 8045;
+
+  if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+		perror ("Can't create a socket");
+		return NULL;
+	}
+
+  // Bind an address to the socket
+	bzero((char *)&client_interface, sizeof(struct sockaddr_in));
+	client_interface.sin_family = AF_INET;
+	client_interface.sin_port = htons(port);
+  // TODO: Change it to only accept connections from server
+	client_interface.sin_addr.s_addr = htonl(INADDR_ANY); // Accept connections from any client
+
+  if (bind(sd, (struct sockaddr *)&client_interface, sizeof(client_interface)) == -1) {
+		perror("Can't bind name to socket");
+		return NULL;
+	}
+
+  // queue up to 1 connect requests
+	listen(sd, 1);
+
+  while(1) {
+    server_i_len = sizeof(server_interface);
+    if ((new_sd = accept(sd, (struct sockaddr *)&server_interface, &server_i_len)) == -1) {
+      fprintf(stderr, "Can't accept client\n");
+      return NULL;
+    }
+
+    bp = buf;
+		bytes_to_read = MAXLEN;
+		while ((n = recv(new_sd, bp, bytes_to_read, MSG_WAITALL)) < MAXLEN) {
+			bp += n;
+			bytes_to_read -= n;
+		}
+    printf("Configuration Thread Received: %s\n", buf);
+
+    close(new_sd);
+  }
+}
+
 void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, const u_char *packet) {
   char str[INET_ADDRSTRLEN];
   char macStr[18];
@@ -39,19 +100,17 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
   struct arp_header   *arp           = (struct arp_header *) (packet + ETHER_LEN);
 
   struct callback_struct *cbs = (struct callback_struct *)(ptrnull);
-  printf("In Callback Funtion Router IP: %s\n", cbs->routerip);
-  printf("In Callback Funtion Router MAC: %s\n", cbs->routermac);
+  //printf("In Callback Funtion Router IP: %s\n", cbs->routerip);
+  //printf("In Callback Funtion Router MAC: %s\n", cbs->routermac);
 
   inet_ntop(AF_INET, arp->sender_ip, str, INET_ADDRSTRLEN);
-  printf("%s\n", str);
-
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
          arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
          arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
-  printf("%s\n", macStr);
+  //printf("Parsed IP: %s\n", str);
+  //printf("Parsed MAC: %s\n", macStr);
 
-  printf("Packet Found!\n");
-
+  /*
   // Validate Ethernet Values
   printf("Ethernet Type: %04hx\n", ethernet->ether_type);
   printf("Ethernet Destination: %02X:%02X:%02X:%02X:%02X:%02X\n",
@@ -72,16 +131,20 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
   printf("ARP Target MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
     arp->target_mac[0], arp->target_mac[1], arp->target_mac[2],
     arp->target_mac[3], arp->target_mac[4], arp->target_mac[5]
-  );
+  ); */
 
   if (memcmp(cbs->routerip, str, sizeof(str)) == 0) {
-    printf("Found IP\n");
+    //printf("Found IP\n");
     if (memcmp(cbs->routermac, macStr, sizeof(macStr)) == 0) {
       // This is actually where we are okay. Both values match.
-      printf("Found MAC\n");
+      //printf("Found MAC\n");
     } else {
       // This is where we know there is something bad happening.
       // sprintf(cmd,"sendmail %s < %s", to, "mail"); // prepare command.
+      ++monitor_count;
+      if (monitor_count > threshold) {
+        printf("Issue Alert\n");
+      }
     }
   }
 }
@@ -149,6 +212,7 @@ void handle_arp_table(char *routerip, char *routermac) {
 
 int main() {
   char *r_type, *a_email, *thold, *routerip, *routermac, *server, *token;
+  // TODO When removing old, unused config values, please put in new ones for config server
   char fbuf[MAXLEN], error[PCAP_ERRBUF_SIZE];
   struct bpf_program fp;
   struct callback_struct *cbs;
@@ -156,6 +220,7 @@ int main() {
   FILE* ccfp;
   pcap_if_t *interfaces;
   pcap_t *nic_descr;
+  pthread_t decrement_thread, configuration_thread;
 
   cbs = (struct callback_struct *) malloc(sizeof(struct callback_struct));
 
@@ -193,6 +258,14 @@ int main() {
       routermac = malloc(sizeof(char) * (strlen(token) + 1));
       read_config(routermac, token);
     }
+  }
+
+  if (strcmp(thold, "Strict") == 0) {
+    threshold = 1;
+  } else if (strcmp(thold, "Normal") == 0) {
+    threshold = 4;
+  } else if (strcmp(thold, "Lenient") == 0) {
+    threshold = 7;
   }
 
   // Find network interface to listen for traffic.
@@ -233,9 +306,14 @@ int main() {
   cbs->routerip = routerip;
   cbs->routermac = routermac;
 
+  pthread_create(&decrement_thread, NULL, decrement_monitor_count, NULL);
+  pthread_create(&configuration_thread, NULL, configuration_interface, NULL);
+
   // Start the capture session
   pcap_loop(nic_descr, 0, handle_arp_traffic, (u_char*)(cbs));
 
+  pthread_kill(decrement_thread, SIGUSR1);
+  pthread_kill(configuration_thread, SIGUSR1);
   pcap_freealldevs(interfaces);
   free(r_type);
   free(a_email);
