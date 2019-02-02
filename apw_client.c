@@ -11,13 +11,19 @@
 #include <sys/inotify.h>
 #include <sys/select.h>
 
+// Define constants. BUFLEN is only used for testing with dummy client,
+// remove later.
 #define MAXLEN    1024
 #define ETHER_LEN 14
 #define EVENT_SIZE (sizeof (struct inotify_event))
+#define BUFLEN 80
 
+// Configuration globals.
 size_t monitor_count = 0;
 size_t threshold     = 0;
+size_t config_port   = 0;
 
+// arp_header struct to parse arp packets.
 struct arp_header {
   uint16_t htype;
   uint16_t ptype;
@@ -30,11 +36,14 @@ struct arp_header {
   uint8_t target_ip[4];
 };
 
+// Callback stuct used in pcap_loop, may be removed in favour
+// of more configuration globals.
 struct callback_struct {
   char *routerip;
   char *routermac;
 };
 
+// Thread method to decrement monitor_count.
 void* decrement_monitor_count() {
   while(1) {
     sleep(3);
@@ -45,34 +54,35 @@ void* decrement_monitor_count() {
   return NULL;
 }
 
+// Thread method to accomodate configuration changes.
 void* configuration_interface() {
-  int sd, new_sd, port, n, bytes_to_read;
-  char buf[MAXLEN], *bp;
+  int sd, new_sd, n, bytes_to_read;
+  char buf[BUFLEN], *bp;
   struct sockaddr_in client_interface, server_interface;
   socklen_t server_i_len;
 
-  port = 8045;
-
+  // Create socket.
   if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		perror ("Can't create a socket");
+    fprintf(stderr, "Can't create a socket");
 		return NULL;
 	}
 
   // Bind an address to the socket
 	bzero((char *)&client_interface, sizeof(struct sockaddr_in));
 	client_interface.sin_family = AF_INET;
-	client_interface.sin_port = htons(port);
+	client_interface.sin_port = htons(config_port);
   // TODO: Change it to only accept connections from server
 	client_interface.sin_addr.s_addr = htonl(INADDR_ANY); // Accept connections from any client
 
   if (bind(sd, (struct sockaddr *)&client_interface, sizeof(client_interface)) == -1) {
-		perror("Can't bind name to socket");
+    fprintf(stderr, "Can't bind name to socket\n");
 		return NULL;
 	}
 
-  // queue up to 1 connect requests
+  // Queue up to 1 connect requests.
 	listen(sd, 1);
 
+  // Accept connection and handle configuration change.
   while(1) {
     server_i_len = sizeof(server_interface);
     if ((new_sd = accept(sd, (struct sockaddr *)&server_interface, &server_i_len)) == -1) {
@@ -81,17 +91,20 @@ void* configuration_interface() {
     }
 
     bp = buf;
-		bytes_to_read = MAXLEN;
-		while ((n = recv(new_sd, bp, bytes_to_read, MSG_WAITALL)) < MAXLEN) {
+		bytes_to_read = BUFLEN;
+		while ((n = recv(new_sd, bp, bytes_to_read, MSG_WAITALL)) < BUFLEN) {
 			bp += n;
 			bytes_to_read -= n;
 		}
-    printf("Configuration Thread Received: %s\n", buf);
+    #ifdef DEBUG
+    printf("configuration_interface: Configuration Thread Received = %s\n", buf);
+    #endif
 
     close(new_sd);
   }
 }
 
+// Function used in pcap_loop to monitor arp traffic and behave accordingly.
 void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, const u_char *packet) {
   char str[INET_ADDRSTRLEN];
   char macStr[18];
@@ -100,44 +113,55 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
   struct arp_header   *arp           = (struct arp_header *) (packet + ETHER_LEN);
 
   struct callback_struct *cbs = (struct callback_struct *)(ptrnull);
-  //printf("In Callback Funtion Router IP: %s\n", cbs->routerip);
-  //printf("In Callback Funtion Router MAC: %s\n", cbs->routermac);
 
+  // Parse IP and MAC address in ARP packet to compare against configuration.
   inet_ntop(AF_INET, arp->sender_ip, str, INET_ADDRSTRLEN);
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
          arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
          arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
-  //printf("Parsed IP: %s\n", str);
-  //printf("Parsed MAC: %s\n", macStr);
 
-  /*
+  #ifdef DEBUG
+  printf("-------------------------------------------------\n");
+  // To validate that the callback function has the correct values
+  printf("handle_arp_traffic: Router IP            =  %s\n", cbs->routerip);
+  printf("handle_arp_traffic: Router MAC           =  %s\n", cbs->routermac);
+  // To display the parsed values in the callback function
+  printf("handle_arp_traffic: Parsed IP            =  %s\n", str);
+  printf("handle_arp_traffic: Parsed MAC           =  %s\n", macStr);
   // Validate Ethernet Values
-  printf("Ethernet Type: %04hx\n", ethernet->ether_type);
-  printf("Ethernet Destination: %02X:%02X:%02X:%02X:%02X:%02X\n",
+  printf("handle_arp_traffic: Ethernet Type        =  %04hx\n", ethernet->ether_type);
+  printf("handle_arp_traffic: Ethernet Destination =  %02X:%02X:%02X:%02X:%02X:%02X\n",
     ethernet->ether_dhost[0], ethernet->ether_dhost[1], ethernet->ether_dhost[2],
     ethernet->ether_dhost[3], ethernet->ether_dhost[4], ethernet->ether_dhost[5]
   );
-  printf("Ethernet Sender:      %02X:%02X:%02X:%02X:%02X:%02X\n",
+  printf("handle_arp_traffic: Ethernet Sender      =  %02X:%02X:%02X:%02X:%02X:%02X\n",
     ethernet->ether_shost[0], ethernet->ether_shost[1], ethernet->ether_shost[2],
     ethernet->ether_shost[3], ethernet->ether_shost[4], ethernet->ether_shost[5]
   );
-
   // Validate ARP Values
-  printf("ARP Opcode: %d\n", ntohs(arp->opcode));
-  printf("ARP Sender MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+  printf("handle_arp_traffic: ARP Opcode     = %d\n", ntohs(arp->opcode));
+  printf("handle_arp_traffic: ARP Sender MAC = %02X:%02X:%02X:%02X:%02X:%02X\n",
     arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
     arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]
   );
-  printf("ARP Target MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+  printf("handle_arp_traffic: ARP Target MAC =  %02X:%02X:%02X:%02X:%02X:%02X\n",
     arp->target_mac[0], arp->target_mac[1], arp->target_mac[2],
     arp->target_mac[3], arp->target_mac[4], arp->target_mac[5]
-  ); */
+  );
+  printf("-------------------------------------------------\n");
+  #endif
 
+  // Compare RouterIP and ARP packet IP.
   if (memcmp(cbs->routerip, str, sizeof(str)) == 0) {
-    //printf("Found IP\n");
+    #ifdef DEBUG
+    printf("handle_arp_traffic: IP Entry Matched Router IP\n");
+    #endif
+    // Compare RouterMAC and ARP packet MAC.
     if (memcmp(cbs->routermac, macStr, sizeof(macStr)) == 0) {
       // This is actually where we are okay. Both values match.
-      //printf("Found MAC\n");
+      #ifdef DEBUG
+      printf("handle_arp_traffic: MAC Entry Matched Router MAC\n");
+      #endif
     } else {
       // This is where we know there is something bad happening.
       // sprintf(cmd,"sendmail %s < %s", to, "mail"); // prepare command.
@@ -149,6 +173,7 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
   }
 }
 
+// Read config token to buffer.
 void read_config(char *string, char *token) {
   char *tmp;
   strcpy(string, token);
@@ -156,6 +181,7 @@ void read_config(char *string, char *token) {
   *tmp = '\0';
 }
 
+// Create permanent ARP entry with given parameters.
 void create_arp_entry(char *buffer, char *routerip, char *routermac) {
   memset(buffer, 0x0, sizeof(buffer));
   strcat(buffer, "arp -s ");
@@ -165,19 +191,19 @@ void create_arp_entry(char *buffer, char *routerip, char *routermac) {
   system(buffer);
 }
 
+// Analyze ARP table and create entries if needed.
 void handle_arp_table(char *routerip, char *routermac) {
   FILE *fp;
   char buf[MAXLEN], arp_line[MAXLEN], *start, *end;
 
   // Run arp -a and pipe the results into a filepointer.
   if ((fp = popen("arp -a", "r")) == NULL) {
-    printf("Failed to run command\n" );
+    fprintf(stderr, "Failed to run command\n" );
     exit(1);
   }
 
   // Read the stdout from the command
   while (fgets(buf, sizeof(buf) - 1, fp) != NULL) {
-    printf("%s", buf);
     // Find router entry, continue if not present.
     if (!(start = strstr(buf, routerip))) {
   		continue;
@@ -191,12 +217,18 @@ void handle_arp_table(char *routerip, char *routermac) {
     memset(arp_line, 0x0, sizeof(arp_line));
  	  strncpy(arp_line, start, (end - start - 1));
     if (strcmp(arp_line, routerip) == 0) {
-      printf("Found Router Line: %s\n", arp_line);
+      #ifdef DEBUG
+      printf("handle_arp_table: Router Line = %s\n", arp_line);
+      #endif
       if ((start = strstr(buf, "PERM"))) {
-        printf("Perm Router Entry Found\n");
+        #ifdef DEBUG
+        printf("handle_arp_table: Perm Router Entry Found\n");
+        #endif
     		return;
       } else {
-        printf("Non-Perm Router Entry Found\n");
+        #ifdef DEBUG
+        printf("handle_arp_table: Non-Perm Router Entry Found\n");
+        #endif
         create_arp_entry(arp_line, routerip, routermac);
         return;
       }
@@ -210,9 +242,9 @@ void handle_arp_table(char *routerip, char *routermac) {
   pclose(fp);
 }
 
+// Main.
 int main() {
-  char *r_type, *a_email, *thold, *routerip, *routermac, *server, *token;
-  // TODO When removing old, unused config values, please put in new ones for config server
+  char *cport, *thold, *routerip, *routermac, *server, *token;
   char fbuf[MAXLEN], error[PCAP_ERRBUF_SIZE];
   struct bpf_program fp;
   struct callback_struct *cbs;
@@ -222,6 +254,7 @@ int main() {
   pcap_t *nic_descr;
   pthread_t decrement_thread, configuration_thread;
 
+  cport = thold = routerip = routermac = server = NULL;
   cbs = (struct callback_struct *) malloc(sizeof(struct callback_struct));
 
   // Open the configuration file. Exit if the file does not open.
@@ -233,14 +266,10 @@ int main() {
   // Parse the configuration file and assign pointers appropriately.
   while (fgets(fbuf, MAXLEN, ccfp)) {
     token = strtok(fbuf, " ");
-    if (strcmp(token, "ReactionType") == 0) {
+    if (strcmp(token, "ConfigServerPort") == 0) {
       token = strtok(NULL, " ");
-      r_type = malloc(sizeof(char) * (strlen(token) + 1));
-      read_config(r_type, token);
-    } else if (strcmp(token, "Email") == 0) {
-      token = strtok(NULL, " ");
-      a_email = malloc(sizeof(char) * (strlen(token) + 1));
-      read_config(a_email, token);
+      cport = malloc(sizeof(char) * (strlen(token) + 1));
+      read_config(cport, token);
     } else if (strcmp(token, "Threshold") == 0) {
       token = strtok(NULL, " ");
       thold = malloc(sizeof(char) * (strlen(token) + 1));
@@ -260,6 +289,14 @@ int main() {
     }
   }
 
+  // Ensure that each configuration option has been found.
+  if ((cport == NULL) || (thold == NULL) || (routerip == NULL) || (routermac == NULL) ||
+             (server == NULL)) {
+    fprintf(stderr, "Configuration Incomplete.\n");
+    exit(1);
+  }
+
+  // Set threshold based on configuration.
   if (strcmp(thold, "Strict") == 0) {
     threshold = 1;
   } else if (strcmp(thold, "Normal") == 0) {
@@ -268,22 +305,29 @@ int main() {
     threshold = 7;
   }
 
+  // Parse configuration port based on configuration.
+  config_port = strtoul(cport, NULL, 0);
+  if (errno == EINVAL || errno == ERANGE) {
+    fprintf(stderr, "strtoul config_port conversion.\n");
+    exit(1);
+  }
+
   // Find network interface to listen for traffic.
   if (pcap_findalldevs(&interfaces, error) == -1) {
-    perror("pcap_findalldevs");
+    fprintf(stderr, "pcap_findalldevs.\n");
     exit(1);
   }
 
   // Verify network interface
   printf("Interface Card: %s\n", interfaces->name);
   // Verify configuration
-  printf("Reaction Type(s): %s\n", r_type);
-  printf("Admin Email(s): %s\n", a_email);
   printf("Threshold: %s\n", thold);
   printf("Router IP: %s\n", routerip);
   printf("Router MAC: %s\n", routermac);
   printf("Server: %s\n", server);
+  printf("Configuration Port: %lu\n", config_port);
 
+  // Open interface to listen on.
   if ((nic_descr = pcap_open_live(interfaces->name, BUFSIZ, 1, -1, error)) == NULL) {
 		printf("pcap_open_live(): %s\n", error);
 		exit(1);
@@ -301,22 +345,29 @@ int main() {
     exit(1);
   }
 
-  //handle_arp_table(routerip, routermac);
   // Setup the Callback Structure
   cbs->routerip = routerip;
   cbs->routermac = routermac;
 
+  #ifdef DEBUG
+  printf("Debug Defined\n");
+  #endif
+
+  // Start threads.
   pthread_create(&decrement_thread, NULL, decrement_monitor_count, NULL);
   pthread_create(&configuration_thread, NULL, configuration_interface, NULL);
+
+  // Handle the ARP table.
+  //handle_arp_table(routerip, routermac);
 
   // Start the capture session
   pcap_loop(nic_descr, 0, handle_arp_traffic, (u_char*)(cbs));
 
+  // Stop threads and free memory.
   pthread_kill(decrement_thread, SIGUSR1);
   pthread_kill(configuration_thread, SIGUSR1);
   pcap_freealldevs(interfaces);
-  free(r_type);
-  free(a_email);
+  free(cport);
   free(thold);
   free(routerip);
   free(routermac);
