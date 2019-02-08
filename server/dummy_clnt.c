@@ -13,14 +13,16 @@
 #define SERVER_TCP_PORT		7000	// Default port
 #define BUFLEN			1024  	// Buffer length
 
+const char* pw = "password1";
+
 void create_alert_message(char *buffer) {
 	sprintf(buffer, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
-	   "acbd", "alert", "07-02-2018 16:36:55", "192.168.0.10", "192.168.0.22");
+	   pw, "alert", "07-02-2018 16:36:55", "192.168.0.10", "192.168.0.22");
 }
 
 void create_log_message(char *buffer) {
 	sprintf(buffer, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
-	   "acbd", "log", "07-02-2018 16:36:55", "192.168.0.10", "192.168.0.22");
+	   pw, "log", "07-02-2018 16:36:55", "192.168.0.10", "192.168.0.22");
 }
 
 int main (int argc, char **argv) {
