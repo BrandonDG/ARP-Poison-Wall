@@ -4,6 +4,22 @@ const lineReader = require('readline');
 const prependFile = require('prepend-file');
 const mysql = require('mysql');
 const uniqid = require('uniqid');
+const nodemailer = require('nodemailer');
+
+var transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: '',
+    pass: ''
+  }
+});
+
+var mailOptions = {
+  from: 'arp.poison.wall@gmail.com',
+  to: 'brandon.gillespie08@gmail.com',
+  subject: 'Sending Email using Node.js',
+  text: 'That was easy!'
+};
 
 function enter_log(payload) {
   prependFile('client_logs', payload, function (err) {
@@ -25,13 +41,27 @@ function enter_alert(mysql_connection, alert_json) {
     if (results[0] == undefined) {
       console.log("No previous alert found");
       query2 = 'INSERT INTO alerts (alertid, from_a, to_a, start_t, end_t, status) VALUES (?, ?, ?, ?, ?, ?);'
-      mysql_connection.query(query2, [uniqid(), alert_json.From, alert_json.To, start_t, end_t, "Active"])
+      mysql_connection.query(query2, [uniqid(), alert_json.From, alert_json.To, start_t, end_t, "Active"], function(error, results, field) {
+        if (error) throw error;
+        mailOptions.subject = "ARP Poison Attack";
+        mailOptions.text = "ARP Poison Attack in Progress from attacker "
+            + alert_json.From + " to host " + alert_json.To + " at time " + end_t;
+        transporter.sendMail(mailOptions, function(error, info){
+          if (error) {
+            console.log(error);
+          } else {
+            console.log('Email sent: ' + info.response);
+          }
+        });
+      });
     } else {
       console.log('The solution is: ', results[0].alertid);
+      mysql_connection.query('UPDATE alerts SET end_t = ? WHERE alertid = ?', [end_t, results[0].alertid], function (error, results, fields) {
+        if (error) throw error;
+      });
     }
   });
 }
-
 
 var connection = mysql.createConnection({
   host     : 'localhost',
@@ -80,32 +110,3 @@ net.createServer(socket => {
     console.log(err)
   })
 }).listen(8001);
-
-
-/*
-const fs = require('fs');
-const readline = require('readline');
-
-const rl = readline.createInterface({
-  input: fs.createReadStream('identification.conf'),
-  crlfDelay: Infinity
-});
-
-rl.on('line', (line) => {
-  tokens = line.split(" ");
-  if (tokens[0] == message.payload.To) {
-    console.log("validated part 1 passed")
-    if (tokens[1] == message.password) {
-      console.log("validated part 2 passed")
-      console.log(message.type);
-    }
-  }
-});
-
-var lineReader = require('readline').createInterface({
-  input: require('fs').createReadStream('identification.conf')
-});
-
-lineReader.on('line', function (line) {
-  console.log('Line from file:', line);
-}); */

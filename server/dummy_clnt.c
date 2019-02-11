@@ -18,7 +18,7 @@ const char* pw = "password1";
 
 void create_alert_message(char *buffer) {
 	sprintf(buffer, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
-	   pw, "alert", "2018-02-07T16:37:04Z", "192.168.0.10", "192.168.0.22");
+	   pw, "alert", "2018-02-07T16:37:05Z", "192.168.0.10", "192.168.0.22");
 }
 
 void create_log_message(char *buffer) {
