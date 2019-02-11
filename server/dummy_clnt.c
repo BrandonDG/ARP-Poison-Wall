@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <errno.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -17,12 +18,12 @@ const char* pw = "password1";
 
 void create_alert_message(char *buffer) {
 	sprintf(buffer, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
-	   pw, "alert", "07-02-2018 16:36:55", "192.168.0.10", "192.168.0.22");
+	   pw, "alert", "2018-02-07T16:37:04Z", "192.168.0.10", "192.168.0.22");
 }
 
 void create_log_message(char *buffer) {
 	sprintf(buffer, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
-	   pw, "log", "07-02-2018 16:36:55", "192.168.0.10", "192.168.0.22");
+	   pw, "log", "2018-02-07 16:36:55", "192.168.0.10", "192.168.0.22");
 }
 
 int main (int argc, char **argv) {

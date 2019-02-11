@@ -2,6 +2,8 @@ const net = require('net');
 const fs  = require('fs');
 const lineReader = require('readline');
 const prependFile = require('prepend-file');
+const mysql = require('mysql');
+const uniqid = require('uniqid');
 
 function enter_log(payload) {
   prependFile('client_logs', payload, function (err) {
@@ -11,6 +13,34 @@ function enter_log(payload) {
     }
   });
 }
+
+function enter_alert(mysql_connection, alert_json) {
+  var date = new Date(alert_json.TimeStamp);
+  var end_t = date.toISOString().replace(/T/, ' ').replace(/\..+/, '');
+  date.setSeconds(date.getSeconds() - 10);
+  var start_t = date.toISOString().replace(/T/, ' ').replace(/\..+/, '');
+  query1 = 'SELECT * FROM alerts WHERE from_a = ? AND to_a = ? AND end_t BETWEEN ? AND ?'
+  mysql_connection.query(query1, [alert_json.From, alert_json.To, start_t, end_t], function (error, results, fields) {
+    if (error) throw error;
+    if (results[0] == undefined) {
+      console.log("No previous alert found");
+      query2 = 'INSERT INTO alerts (alertid, from_a, to_a, start_t, end_t, status) VALUES (?, ?, ?, ?, ?, ?);'
+      mysql_connection.query(query2, [uniqid(), alert_json.From, alert_json.To, start_t, end_t, "Active"])
+    } else {
+      console.log('The solution is: ', results[0].alertid);
+    }
+  });
+}
+
+
+var connection = mysql.createConnection({
+  host     : 'localhost',
+  user     : 'root',
+  password : '',
+  database : 'arp_poison_db'
+});
+
+connection.connect();
 
 //console.log("Hello I am Nodejs")
 net.createServer(socket => {
@@ -33,6 +63,8 @@ net.createServer(socket => {
         if (tokens[1] == message.password) {
           if (message.type == "alert") {
             console.log("Run alert code");
+            console.log(message.payload);
+            enter_alert(connection, message.payload);
           } else if (message.type == "log") {
             console.log("Run log code");
             console.log(JSON.stringify(message.payload));
