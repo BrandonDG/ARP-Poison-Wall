@@ -21,6 +21,17 @@ var mailOptions = {
   text: 'That was easy!'
 };
 
+var connection = mysql.createConnection({
+  host     : 'localhost',
+  user     : 'root',
+  password : '',
+  database : 'arp_poison_db'
+});
+
+var raw_config = fs.readFileSync("server_conf.json");
+var config = JSON.parse(raw_config);
+//console.log(config.key);
+
 function enter_log(payload) {
   prependFile('client_logs', payload, function (err) {
     if (err) {
@@ -55,7 +66,7 @@ function enter_alert(mysql_connection, alert_json) {
         });
       });
     } else {
-      console.log('The solution is: ', results[0].alertid);
+      console.log('Alert already exists: ', results[0].alertid);
       mysql_connection.query('UPDATE alerts SET end_t = ? WHERE alertid = ?', [end_t, results[0].alertid], function (error, results, fields) {
         if (error) throw error;
       });
@@ -63,22 +74,14 @@ function enter_alert(mysql_connection, alert_json) {
   });
 }
 
-var connection = mysql.createConnection({
-  host     : 'localhost',
-  user     : 'root',
-  password : '',
-  database : 'arp_poison_db'
-});
-
 connection.connect();
-
-//console.log("Hello I am Nodejs")
 net.createServer(socket => {
-  socket.on('data', function(data){
+  socket.on('data', function(data) {
     buf1 = Buffer.alloc(1024);
+
     buf1.write(data.toString());
-    console.log('Echoing: %s', data.toString());
-    socket.write(buf1);
+    console.log('Received: %s', data.toString());
+    //socket.write(buf1);
 
     var message = JSON.parse(data.toString());
     //console.log(socket.remoteAddress)
@@ -93,11 +96,11 @@ net.createServer(socket => {
         if (tokens[1] == message.password) {
           if (message.type == "alert") {
             console.log("Run alert code");
-            console.log(message.payload);
+            //console.log(message.payload);
             enter_alert(connection, message.payload);
           } else if (message.type == "log") {
             console.log("Run log code");
-            console.log(JSON.stringify(message.payload));
+            //console.log(JSON.stringify(message.payload));
             enter_log((JSON.stringify(message.payload)).concat('\n'));
           }
         }

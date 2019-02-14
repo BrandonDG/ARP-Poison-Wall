@@ -12,7 +12,7 @@
 #include <arpa/inet.h>
 
 #define SERVER_TCP_PORT		7000	// Default port
-#define BUFLEN			1024  	// Buffer length
+#define BUFLEN			2048  	// Buffer length
 
 const char* pw = "password1";
 
@@ -31,7 +31,7 @@ int main (int argc, char **argv) {
 	int sd, port;
 	struct hostent	*hp;
 	struct sockaddr_in server;
-	char  *host, *bp, rbuf[BUFLEN], sbuf[BUFLEN], **pptr, *sptr;
+	char  *host, *bp, rbuf[BUFLEN], sbuf[BUFLEN], ebuf[BUFLEN], **pptr, *sptr;
 	char str[16];
 
 	switch(argc) {

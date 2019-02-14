@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
+#include <netdb.h>
 #include <net/ethernet.h>
 #include <pcap.h>
 #include <pthread.h>
@@ -10,6 +11,7 @@
 #include <stdlib.h>
 #include <sys/inotify.h>
 #include <sys/select.h>
+#include <time.h>
 
 // Define constants. BUFLEN is only used for testing with dummy client,
 // remove later.
@@ -22,6 +24,9 @@
 size_t monitor_count = 0;
 size_t threshold     = 0;
 size_t config_port   = 0;
+size_t server_port   = 0;
+
+const char* pw = "password1";
 
 // arp_header struct to parse arp packets.
 struct arp_header {
@@ -41,6 +46,7 @@ struct arp_header {
 struct callback_struct {
   char *routerip;
   char *routermac;
+  int sd;
 };
 
 // Thread method to decrement monitor_count.
@@ -107,6 +113,7 @@ void* configuration_interface() {
 // Function used in pcap_loop to monitor arp traffic and behave accordingly.
 void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, const u_char *packet) {
   char str[INET_ADDRSTRLEN];
+  char my_ip[INET_ADDRSTRLEN];
   char macStr[18];
 
   struct ether_header *ethernet      = (struct ether_header *) packet;
@@ -116,6 +123,7 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
 
   // Parse IP and MAC address in ARP packet to compare against configuration.
   inet_ntop(AF_INET, arp->sender_ip, str, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, arp->target_ip, my_ip, INET_ADDRSTRLEN);
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
          arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
          arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
@@ -163,11 +171,25 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
       printf("handle_arp_traffic: MAC Entry Matched Router MAC\n");
       #endif
     } else {
+      time_t t = time(NULL);
+      struct tm tm = *localtime(&t);
+
       // This is where we know there is something bad happening.
-      // sprintf(cmd,"sendmail %s < %s", to, "mail"); // prepare command.
+      char lbuf[MAXLEN], timestamp[MAXLEN], abuf[MAXLEN];
+      sprintf(timestamp, "%4d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+      sprintf(lbuf, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
+    	   pw, "log", timestamp, macStr, my_ip);
+      printf("%s\n", lbuf);
+      send(cbs->sd, lbuf, strlen(lbuf), 0);
+      printf("Issue Log\n");
+      sleep(1);
       ++monitor_count;
       if (monitor_count > threshold) {
         printf("Issue Alert\n");
+        sprintf(abuf, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
+      	   pw, "alert", timestamp, macStr, my_ip);
+        printf("%s\n", abuf);
+        send(cbs->sd, abuf, strlen(abuf), 0);
       }
     }
   }
@@ -244,7 +266,7 @@ void handle_arp_table(char *routerip, char *routermac) {
 
 // Main.
 int main() {
-  char *cport, *thold, *routerip, *routermac, *server, *token;
+  char *cport, *thold, *routerip, *routermac, *server, *token, *s_port;
   char fbuf[MAXLEN], error[PCAP_ERRBUF_SIZE];
   struct bpf_program fp;
   struct callback_struct *cbs;
@@ -253,8 +275,11 @@ int main() {
   pcap_if_t *interfaces;
   pcap_t *nic_descr;
   pthread_t decrement_thread, configuration_thread;
+  int sd;
+  struct hostent *hp;
+  struct sockaddr_in apw_server;
 
-  cport = thold = routerip = routermac = server = NULL;
+  cport = thold = routerip = routermac = server = s_port = NULL;
   cbs = (struct callback_struct *) malloc(sizeof(struct callback_struct));
 
   // Open the configuration file. Exit if the file does not open.
@@ -286,12 +311,16 @@ int main() {
       token = strtok(NULL, " ");
       routermac = malloc(sizeof(char) * (strlen(token) + 1));
       read_config(routermac, token);
+    } else if (strcmp(token, "ServerPort") == 0) {
+      token = strtok(NULL, " ");
+      s_port = malloc(sizeof(char) * (strlen(token) + 1));
+      read_config(s_port, token);
     }
   }
 
   // Ensure that each configuration option has been found.
   if ((cport == NULL) || (thold == NULL) || (routerip == NULL) || (routermac == NULL) ||
-             (server == NULL)) {
+             (server == NULL) || (s_port == NULL)) {
     fprintf(stderr, "Configuration Incomplete.\n");
     exit(1);
   }
@@ -312,6 +341,13 @@ int main() {
     exit(1);
   }
 
+  // Parse configuration port based on configuration.
+  server_port = strtoul(s_port, NULL, 0);
+  if (errno == EINVAL || errno == ERANGE) {
+    fprintf(stderr, "strtoul server_port conversion.\n");
+    exit(1);
+  }
+
   // Find network interface to listen for traffic.
   if (pcap_findalldevs(&interfaces, error) == -1) {
     fprintf(stderr, "pcap_findalldevs.\n");
@@ -325,6 +361,7 @@ int main() {
   printf("Router IP: %s\n", routerip);
   printf("Router MAC: %s\n", routermac);
   printf("Server: %s\n", server);
+  printf("Server Port: %lu\n", server_port);
   printf("Configuration Port: %lu\n", config_port);
 
   // Open interface to listen on.
@@ -345,9 +382,31 @@ int main() {
     exit(1);
   }
 
+  // Establish server here
+  bzero((char *)&apw_server, sizeof(struct sockaddr_in));
+  apw_server.sin_family = AF_INET;
+  apw_server.sin_port = htons(server_port);
+  if ((hp = gethostbyname("localhost")) == NULL) {
+    fprintf(stderr, "Unknown server address\n");
+    exit(1);
+  }
+  bcopy(hp->h_addr, (char *)&apw_server.sin_addr, hp->h_length);
+
+  if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    perror("Cannot create socket");
+    exit(1);
+  }
+
+  if (connect(sd, (struct sockaddr *)&apw_server, sizeof(apw_server)) == -1) {
+    fprintf(stderr, "Can't connect to server\n");
+    perror("connect");
+    exit(1);
+  }
+
   // Setup the Callback Structure
   cbs->routerip = routerip;
   cbs->routermac = routermac;
+  cbs->sd = sd;
 
   #ifdef DEBUG
   printf("Debug Defined\n");
@@ -358,7 +417,7 @@ int main() {
   pthread_create(&configuration_thread, NULL, configuration_interface, NULL);
 
   // Handle the ARP table.
-  //handle_arp_table(routerip, routermac);
+  handle_arp_table(routerip, routermac);
 
   // Start the capture session
   pcap_loop(nic_descr, 0, handle_arp_traffic, (u_char*)(cbs));
@@ -373,6 +432,7 @@ int main() {
   free(routermac);
   free(server);
   free(cbs);
+  close(sd);
 
   return 0;
 }

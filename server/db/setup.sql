@@ -6,7 +6,7 @@ DROP TABLE IF EXISTS alerts;
 
 CREATE TABLE alerts (
   alertid VARCHAR(18) NOT NULL,
-  from_a  VARCHAR(15) NOT NULL,
+  from_a  VARCHAR(17) NOT NULL,
   to_a    VARCHAR(15) NOT NULL,
   start_t DATETIME    NOT NULL,
   end_t   DATETIME    NOT NULL,
