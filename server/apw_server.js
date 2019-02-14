@@ -83,29 +83,35 @@ net.createServer(socket => {
     console.log('Received: %s', data.toString());
     //socket.write(buf1);
 
-    var message = JSON.parse(data.toString());
     //console.log(socket.remoteAddress)
 
-    // Hopefully isn't too slow doing it this way.
-    var reader_interface = lineReader.createInterface({
-      input: fs.createReadStream('identification.conf')
-    });
-    reader_interface.on('line', function (line) {
-      tokens = line.split(" ");
-      if (tokens[0] == message.payload.To) {
-        if (tokens[1] == message.password) {
-          if (message.type == "alert") {
-            console.log("Run alert code");
-            //console.log(message.payload);
-            enter_alert(connection, message.payload);
-          } else if (message.type == "log") {
-            console.log("Run log code");
-            //console.log(JSON.stringify(message.payload));
-            enter_log((JSON.stringify(message.payload)).concat('\n'));
+    var message;
+    try {
+      message = JSON.parse(data.toString());
+
+      // Hopefully isn't too slow doing it this way.
+      var reader_interface = lineReader.createInterface({
+        input: fs.createReadStream('identification.conf')
+      });
+      reader_interface.on('line', function (line) {
+        tokens = line.split(" ");
+        if (tokens[0] == message.payload.To) {
+          if (tokens[1] == message.password) {
+            if (message.type == "alert") {
+              console.log("Run alert code");
+              //console.log(message.payload);
+              enter_alert(connection, message.payload);
+            } else if (message.type == "log") {
+              console.log("Run log code");
+              //console.log(JSON.stringify(message.payload));
+              enter_log((JSON.stringify(message.payload)).concat('\n'));
+            }
           }
         }
-      }
-    });
+      });
+    } catch(e) {
+      console.log("json parse error");
+    }
 
   })
   socket.on('error', (err) => {

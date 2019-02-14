@@ -12,7 +12,7 @@
 #include <arpa/inet.h>
 
 #define SERVER_TCP_PORT		7000	// Default port
-#define BUFLEN			2048  	// Buffer length
+#define BUFLEN			1024  	// Buffer length
 
 const char* pw = "password1";
 
