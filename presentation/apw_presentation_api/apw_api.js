@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const fs  = require('fs');
+const lineReader = require('readline');
 
 const withAuth = require('./auth_layer');
 const app = express();
@@ -21,7 +23,18 @@ app.get('/api/auth', function(req, res) {
 });
 
 app.get('/api/home', function(req, res) {
-  return res.send('Welcome!');
+  var ips = [];
+  var lines = fs.readFileSync('/home/brandondg/Documents/BTECH_T4/COMP8045/ARPPoisonWall/server/identification.conf', 'utf-8')
+    .split('\n')
+    .filter(Boolean);
+
+  for (var i = 0; i < lines.length; i++) {
+    tokens = lines[0].split(" ");
+    ips.push({ ip: tokens[0] });
+  }
+
+  console.log(ips);
+  return res.send(ips);
 });
 
 app.get('/api/secret', withAuth, function(req, res) {
@@ -42,46 +55,5 @@ app.post('/api/authenticate', function(req, res) {
 app.get('/checkToken', withAuth, function(req, res) {
   res.sendStatus(200);
 });
-
-/*
-app.post('/api/authenticate', function(req, res) {
-  const { email, password } = req.body;
-  User.findOne({ email }, function(err, user) {
-    if (err) {
-      console.error(err);
-      res.status(500)
-        .json({
-        error: 'Internal error please try again'
-      });
-    } else if (!user) {
-      res.status(401)
-        .json({
-          error: 'Incorrect email or password'
-        });
-    } else {
-      user.isCorrectPassword(password, function(err, same) {
-        if (err) {
-          res.status(500)
-            .json({
-              error: 'Internal error please try again'
-          });
-        } else if (!same) {
-          res.status(401)
-            .json({
-              error: 'Incorrect email or password'
-          });
-        } else {
-          // Issue token
-          const payload = { email };
-          const token = jwt.sign(payload, secret, {
-            expiresIn: '1h'
-          });
-          res.cookie('token', token, { httpOnly: true })
-            .sendStatus(200);
-        }
-      });
-    }
-  });
-}); */
 
 app.listen(process.env.PORT || 8080);
