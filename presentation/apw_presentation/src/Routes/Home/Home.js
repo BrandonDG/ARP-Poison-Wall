@@ -1,15 +1,21 @@
 import React, { Component } from 'react';
 import { Table } from 'react-bootstrap';
+import BootstrapTable from 'react-bootstrap-table-next';
 
+/*
 function HostTableRow(props) {
-  return (
+  const rows = props.value.map((ip) =>
     <tr>
-      <td>{props.value}</td>
+      <td>ip.ip</td>
     </tr>
+  );
+  return (
+    {rows}
   );
 }
 
 function HostTable(props) {
+  console.log(props.value);
   return (
     <Table striped bordered hover>
       <thead>
@@ -18,13 +24,11 @@ function HostTable(props) {
         </tr>
       </thead>
       <tbody>
-        {
-          props.value
-        }
+        <HostTableRow value={props.value} />
       </tbody>
     </Table>
   );
-}
+} */
 
 export default class Home extends Component {
   constructor() {
@@ -32,8 +36,18 @@ export default class Home extends Component {
     //Set default message
     this.state = {
       message: 'Loading...',
-      ips: []
+      ips: [],
+      columns: [{
+        dataField: 'ip',
+        text: "Host",
+        events: {
+          onClick: (e, column, columnIndex, row, rowIndex) => {
+            console.log(row);
+          }
+        }
+      }]
     }
+
   }
 
   componentDidMount() {
@@ -51,8 +65,7 @@ export default class Home extends Component {
       <div>
         <h1>Home</h1>
         <p>{this.state.message}</p>
-        <HostTable value={this.state.message} >
-        </HostTable>
+        <BootstrapTable keyField="ip" data={ this.state.ips } columns = { this.state.columns } />
       </div>
     );
   }

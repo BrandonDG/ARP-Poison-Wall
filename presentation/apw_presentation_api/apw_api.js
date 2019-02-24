@@ -29,7 +29,8 @@ app.get('/api/home', function(req, res) {
     .filter(Boolean);
 
   for (var i = 0; i < lines.length; i++) {
-    tokens = lines[0].split(" ");
+    tokens = lines[i].split(" ");
+    console.log(lines);
     ips.push({ ip: tokens[0] });
   }
 
