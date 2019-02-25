@@ -1,12 +1,20 @@
 import React, { Component } from 'react';
 import { Link, Route, Switch } from 'react-router-dom';
 import Home from './Routes/Home/Home';
+import Host from './Routes/Host/Host';
 import Secret from './Routes/Secret/Secret';
 import Login from './Routes/Login/Login';
 import withAuth from './withAuth';
-import { Button, Navbar, Nav, NavDropdown, Form, FormControl } from 'react-bootstrap';
+import { Navbar, Nav } from 'react-bootstrap';
 
 export default class App extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      selectedip: "192.168.0.1"
+    };
+  }
+
   render() {
     return (
 
@@ -27,6 +35,7 @@ export default class App extends React.Component {
 
         <Switch>
           <Route path="/" exact component={withAuth(Home)} />
+          <Route path="/Host/:ip" component={withAuth(Host)} />
           <Route path="/secret" component={withAuth(Secret)} />
           <Route path="/login" component={Login} />
         </Switch>

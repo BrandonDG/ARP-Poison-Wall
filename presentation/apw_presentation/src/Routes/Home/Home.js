@@ -1,7 +1,5 @@
 import React, { Component } from 'react';
-import { Table } from 'react-bootstrap';
 import BootstrapTable from 'react-bootstrap-table-next';
-
 /*
 function HostTableRow(props) {
   const rows = props.value.map((ip) =>
@@ -31,8 +29,8 @@ function HostTable(props) {
 } */
 
 export default class Home extends Component {
-  constructor() {
-    super();
+  constructor(props) {
+    super(props);
     //Set default message
     this.state = {
       message: 'Loading...',
@@ -42,7 +40,8 @@ export default class Home extends Component {
         text: "Host",
         events: {
           onClick: (e, column, columnIndex, row, rowIndex) => {
-            console.log(row);
+            console.log(row.ip);
+            this.props.history.push('/Host/' + row.ip);
           }
         }
       }]

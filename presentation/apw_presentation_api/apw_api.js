@@ -38,6 +38,10 @@ app.get('/api/home', function(req, res) {
   return res.send(ips);
 });
 
+app.get('/api/host', withAuth, function(req, res) {
+  res.send('This is host page');
+});
+
 app.get('/api/secret', withAuth, function(req, res) {
   res.send('You are successfully validated');
 });
