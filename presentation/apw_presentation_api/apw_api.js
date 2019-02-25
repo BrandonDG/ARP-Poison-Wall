@@ -4,15 +4,24 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const fs  = require('fs');
 const lineReader = require('readline');
+const mysql = require('mysql');
 
 const withAuth = require('./auth_layer');
 const app = express();
 
 const secret = 'mysecretsshhh';
+var connection = mysql.createConnection({
+  host     : 'localhost',
+  user     : 'root',
+  password : '',
+  database : 'arp_poison_db'
+});
 
 app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
+
+connection.connect();
 
 app.get('/', function (req, res) {
  return res.send('Hello world');
@@ -39,7 +48,38 @@ app.get('/api/home', function(req, res) {
 });
 
 app.get('/api/host', withAuth, function(req, res) {
-  res.send('This is host page');
+  console.log("api/host request // body = " + req.header('selectedip'));
+  var response = { logs: [], alerts: [], status: ''};
+  var query = "SELECT * FROM logs WHERE to_a = ?";
+  connection.query(query, [req.header('selectedip')], function(error, results, field) {
+    if (error) throw error;
+    if (results[0] != undefined) {
+      response.logs.push(results);
+    }
+    //console.log(response.logs);
+    query = "SELECT * FROM alerts WHERE to_a = ?";
+    connection.query(query, [req.header('selectedip')], function(error, results, field) {
+      if (error) throw error;
+      if (results[0] != undefined) {
+        response.alerts.push(results);
+      }
+      //console.log(response.alerts);
+      query = "SELECT * FROM alerts WHERE to_a = ? AND status = ?";
+      connection.query(query, [req.header('selectedip'), 'Active'], function(error, results, field) {
+        if (error) throw error;
+        if (results[0] != undefined) {
+          response.status = 'Active';
+        } else {
+          response.status = 'Inactive';
+        }
+        console.log(response.logs);
+        console.log(response.alerts);
+        console.log(response.status);
+
+        return res.send(response);
+      });
+    });
+  });
 });
 
 app.get('/api/secret', withAuth, function(req, res) {
