@@ -8,6 +8,8 @@ export default class Host extends Component {
     //Set default message
     this.state = {
       message: 'Loading...',
+      selected: undefined,
+      selected_status: undefined,
       host_info: {
         alerts: [],
         logs: [],
@@ -43,7 +45,7 @@ export default class Host extends Component {
         text: 'Victim'
       }, {
         dataField: 'time_s',
-        text: 'Timestamp'
+        text: 'Timestamp',
       }]
     };
   }
@@ -64,18 +66,72 @@ export default class Host extends Component {
       });
   }
 
+  changeStatus = () => {
+    if (this.state.selected != undefined) {
+      fetch('/api/changestatus', {
+        method: 'PUT',
+        headers: {
+          'selectedalert': this.state.selected,
+          'status': this.state.selected_status
+        }
+      })
+        .then(res => res.text())
+        .then(res => {
+          fetch('/api/host', {
+            method: 'GET',
+            headers: {
+              'selectedip': this.props.match.params.ip
+            }
+          })
+            .then(res => res.text())
+            .then(res => {
+              this.setState({
+                message: "This is host page",
+                host_info: JSON.parse(res)
+              });
+            });
+        });
+    }
+  }
+
+  handleSelection = (row) => {
+    this.state.selected = row.alertid;
+    this.state.selected_status = row.status;
+    console.log(this.state.selected);
+  }
+
   render() {
     console.log(this.state.host_info.alerts);
     console.log(this.state.host_info.logs);
+    const selectRow = {
+      mode: 'radio',
+      clickToSelect: true,
+      onSelect: this.handleSelection,
+      style: { backgroundColor: '#c8e6c9' }
+    };
     return (
       <div>
         <h1>Host</h1>
         <h2>Host IP: {this.props.match.params.ip}</h2>
         <h2>Status:  {this.state.host_info.status}</h2>
+        <hr />
         <h2>Alerts</h2>
-        <BootstrapTable keyField="alertid" data={ this.state.host_info.alerts } columns = { this.state.alert_columns } />
+        <BootstrapTable
+          keyField="alertid"
+          data={ this.state.host_info.alerts }
+          columns = { this.state.alert_columns }
+          pagination = { paginationFactory() }
+          selectRow = { selectRow }
+        />
+        <button className="btn btn-success" onClick={ this.changeStatus }>Change Status</button>
+        <hr />
         <h2>Logs</h2>
-        <BootstrapTable keyField="logid" data={ this.state.host_info.logs } columns = { this.state.log_columns } />
+        <BootstrapTable
+          keyField="logid"
+          data={ this.state.host_info.logs }
+          columns = { this.state.log_columns }
+          pagination = { paginationFactory() }
+          />
       </div>
     );
   }

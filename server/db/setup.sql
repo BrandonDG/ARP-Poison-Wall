@@ -27,10 +27,10 @@ INSERT INTO alerts (alertid, from_a, to_a, start_t, end_t, status)
   VALUES ('A.4@1fl', '192.168.0.10', '192.168.0.22', '2018-02-07 16:36:50', '2018-02-07 16:36:53', 'Active');
 
 INSERT INTO alerts (alertid, from_a, to_a, start_t, end_t, status)
-  VALUES ('B.4@1fl', '192.168.0.10', '192.168.0.21', '2018-02-06 13:36:16', '2018-02-07 13:36:18', 'Inactive');
+  VALUES ('B.4@1fl', '192.168.0.10', '192.168.0.21', '2018-02-06 13:36:16', '2018-02-06 13:36:18', 'Inactive');
 
 INSERT INTO alerts (alertid, from_a, to_a, start_t, end_t, status)
-  VALUES ('C.4@1fl', '192.168.0.10', '192.168.0.22', '2018-02-06 05:08:11', '2018-02-07 05:08:12', 'Inactive');
+  VALUES ('C.4@1fl', '192.168.0.10', '192.168.0.22', '2018-02-06 05:08:11', '2018-02-06 05:08:12', 'Inactive');
 
 
 INSERT INTO logs (from_a, to_a, time_s)

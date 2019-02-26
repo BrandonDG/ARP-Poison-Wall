@@ -50,7 +50,8 @@ app.get('/api/home', function(req, res) {
 app.get('/api/host', withAuth, function(req, res) {
   console.log("api/host request // body = " + req.header('selectedip'));
   var response = { logs: [], alerts: [], status: ''};
-  var query = "SELECT * FROM logs WHERE to_a = ?";
+  //var query = "SELECT * FROM logs WHERE to_a = ?";
+  var query = "SELECT * FROM logs WHERE to_a = ? ORDER BY time_s DESC";
   connection.query(query, [req.header('selectedip')], function(error, results, field) {
     if (error) throw error;
     if (results[0] != undefined) {
@@ -65,7 +66,7 @@ app.get('/api/host', withAuth, function(req, res) {
       }
     }
     //console.log(response.logs);
-    query = "SELECT * FROM alerts WHERE to_a = ?";
+    query = "SELECT * FROM alerts WHERE to_a = ? ORDER BY end_t DESC";
     connection.query(query, [req.header('selectedip')], function(error, results, field) {
       if (error) throw error;
       if (results[0] != undefined) {
@@ -96,6 +97,22 @@ app.get('/api/host', withAuth, function(req, res) {
         return res.send(response);
       });
     });
+  });
+});
+
+app.put('/api/changestatus', withAuth, function(req, res) {
+  console.log("api/changestatus request // body = " + req.header('selectedalert'));
+  console.log("api/changestatus request // body = " + req.header('status'));
+  var changeto = "";
+  if (req.header('status') == "Active") {
+    changeto = "Inactive";
+  } else {
+    changeto = "Active"
+  }
+  query = "UPDATE alerts SET status = ? WHERE alertid = ?";
+  connection.query(query, [changeto, req.header('selectedalert')], function(error, results, field) {
+    if (error) throw error;
+    return res.send("Changed");
   });
 });
 
