@@ -1,32 +1,5 @@
 import React, { Component } from 'react';
 import BootstrapTable from 'react-bootstrap-table-next';
-/*
-function HostTableRow(props) {
-  const rows = props.value.map((ip) =>
-    <tr>
-      <td>ip.ip</td>
-    </tr>
-  );
-  return (
-    {rows}
-  );
-}
-
-function HostTable(props) {
-  console.log(props.value);
-  return (
-    <Table striped bordered hover>
-      <thead>
-        <tr>
-          <th>Host</th>
-        </tr>
-      </thead>
-      <tbody>
-        <HostTableRow value={props.value} />
-      </tbody>
-    </Table>
-  );
-} */
 
 export default class Home extends Component {
   constructor(props) {

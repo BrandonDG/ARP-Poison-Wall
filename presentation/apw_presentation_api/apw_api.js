@@ -54,14 +54,31 @@ app.get('/api/host', withAuth, function(req, res) {
   connection.query(query, [req.header('selectedip')], function(error, results, field) {
     if (error) throw error;
     if (results[0] != undefined) {
-      response.logs.push(results);
+      //response.logs.push(results);
+      for (var i = 0; i < results.length; i++) {
+        response.logs.push({
+          logid: results[i].logid,
+          time_s: results[i].time_s,
+          from_a: results[i].from_a,
+          to_a: results[i].to_a
+        });
+      }
     }
     //console.log(response.logs);
     query = "SELECT * FROM alerts WHERE to_a = ?";
     connection.query(query, [req.header('selectedip')], function(error, results, field) {
       if (error) throw error;
       if (results[0] != undefined) {
-        response.alerts.push(results);
+        for (var i = 0; i < results.length; i++) {
+          response.alerts.push({
+            alertid: results[i].alertid,
+            end_t: results[i].end_t,
+            start_t: results[i].start_t,
+            from_a: results[i].from_a,
+            to_a: results[i].to_a,
+            status: results[i].status
+          });
+        }
       }
       //console.log(response.alerts);
       query = "SELECT * FROM alerts WHERE to_a = ? AND status = ?";
