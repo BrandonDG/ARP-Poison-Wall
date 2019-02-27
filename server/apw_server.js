@@ -32,12 +32,22 @@ var raw_config = fs.readFileSync("server_conf.json");
 var config = JSON.parse(raw_config);
 //console.log(config.key);
 
+/*
 function enter_log(payload) {
   prependFile('client_logs', payload, function (err) {
     if (err) {
       console.log("Error Occurred")
       console.log(err)
     }
+  });
+} */
+
+function enter_log(mysql_connection, log_json) {
+  var date = new Date(log_json.TimeStamp);
+  var time_s = date.toISOString().replace(/T/, ' ').replace(/\..+/, '');
+  query = 'INSERT INTO logs (from_a, to_a, time_s) VALUES (?, ?, ?);'
+  mysql_connection.query(query, [log_json.From, log_json.To, time_s], function(error, results, field) {
+    if (error) throw error;
   });
 }
 
@@ -118,4 +128,4 @@ net.createServer(socket => {
     console.log("Error Occurred")
     console.log(err)
   })
-}).listen(8001);
+}).listen(8001
