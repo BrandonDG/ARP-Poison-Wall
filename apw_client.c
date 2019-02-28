@@ -25,8 +25,12 @@ size_t monitor_count = 0;
 size_t threshold     = 0;
 size_t config_port   = 0;
 size_t server_port   = 0;
+char   *router_ip;
+char   *router_mac;
 
+// TODO: put this as a config value
 const char* pw = "password1";
+// TODO: put filename in config value
 
 // arp_header struct to parse arp packets.
 struct arp_header {
@@ -60,12 +64,27 @@ void* decrement_monitor_count() {
   return NULL;
 }
 
+// Create permanent ARP entry with given parameters.
+void replace_config_value(char *buffer, char *find, char *replace1, char *replace2, char *filename) {
+  memset(buffer, 0x0, sizeof(buffer));
+  strcat(buffer, "sed -i '/");
+  strcat(buffer, find);
+  strcat(buffer, "/c\\");
+  strcat(buffer, replace1);
+  strcat(buffer, replace2);
+  strcat(buffer, "' ");
+  strcat(buffer, filename);
+  system(buffer);
+}
+
 // Thread method to accomodate configuration changes.
 void* configuration_interface() {
-  int sd, new_sd, n, bytes_to_read;
-  char buf[BUFLEN], *bp;
+  int sd, new_sd, n, bytes_to_read, t_count;
+  char buf[MAXLEN], *bp, *token;
   struct sockaddr_in client_interface, server_interface;
   socklen_t server_i_len;
+
+  char th[20], ip[20], mac[20], rpw[20], cc_buffer[50];
 
   // Create socket.
   if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -86,10 +105,11 @@ void* configuration_interface() {
 	}
 
   // Queue up to 1 connect requests.
-	listen(sd, 1);
+	listen(sd, 5);
 
   // Accept connection and handle configuration change.
   while(1) {
+    t_count = 0;
     server_i_len = sizeof(server_interface);
     if ((new_sd = accept(sd, (struct sockaddr *)&server_interface, &server_i_len)) == -1) {
       fprintf(stderr, "Can't accept client\n");
@@ -97,14 +117,60 @@ void* configuration_interface() {
     }
 
     bp = buf;
-		bytes_to_read = BUFLEN;
-		while ((n = recv(new_sd, bp, bytes_to_read, MSG_WAITALL)) < BUFLEN) {
+		bytes_to_read = MAXLEN;
+		while ((n = recv(new_sd, bp, bytes_to_read, MSG_WAITALL)) < MAXLEN) {
 			bp += n;
 			bytes_to_read -= n;
 		}
     #ifdef DEBUG
     printf("configuration_interface: Configuration Thread Received = %s\n", buf);
     #endif
+    printf("configuration_interface: Configuration Thread Received = %s\n", buf);
+
+    token = strtok(buf, "\"");
+    while ( token != NULL ) {
+      if (t_count == 3) {
+        strcpy(rpw, token);
+      } else if (t_count == 9) {
+        strcpy(mac, token);
+      } else if (t_count == 13) {
+        strcpy(ip, token);
+      } else if (t_count == 17) {
+        strcpy(th, token);
+      }
+      token = strtok(NULL, "\"");
+      ++t_count;
+    }
+    // apw_client_configuration.conf
+
+    printf("%s\n %s\n %s\n %s\n", rpw, mac, ip, th);
+
+    if (strcmp(rpw, pw) == 0) {
+      printf("Communication Accepted\n");
+      if (strcmp(mac, "Empty") != 0) {
+        router_mac = mac;
+        printf("Set MAC value: %s\n", router_mac);
+        replace_config_value(cc_buffer, "RouterMAC", "RouterMAC ", router_mac, "apw_client_configuration.conf");
+      }
+      if (strcmp(ip, "Empty") != 0) {
+        router_ip = ip;
+        printf("Set IP value: %s\n", router_ip);
+        replace_config_value(cc_buffer, "RouterIP", "RouterIP ", router_ip, "apw_client_configuration.conf");
+      }
+
+      if (strcmp(th, "Strict") == 0) {
+        printf("Set Strict\n");
+        threshold = 1;
+      } else if (strcmp(th, "Normal") == 0) {
+        printf("Set Normal\n");
+        threshold = 4;
+      } else if (strcmp(th, "Lenient") == 0) {
+        printf("Set Lenient\n");
+        threshold = 7;
+      }
+
+      replace_config_value(cc_buffer, "Threshold", "Threshold ", th, "apw_client_configuration.conf");
+    }
 
     close(new_sd);
   }
@@ -160,12 +226,12 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
   #endif
 
   // Compare RouterIP and ARP packet IP.
-  if (memcmp(cbs->routerip, str, sizeof(str)) == 0) {
+  if (memcmp(router_ip, str, sizeof(str)) == 0) {
     #ifdef DEBUG
     printf("handle_arp_traffic: IP Entry Matched Router IP\n");
     #endif
     // Compare RouterMAC and ARP packet MAC.
-    if (memcmp(cbs->routermac, macStr, sizeof(macStr)) == 0) {
+    if (memcmp(router_mac, macStr, sizeof(macStr)) == 0) {
       // This is actually where we are okay. Both values match.
       #ifdef DEBUG
       printf("handle_arp_traffic: MAC Entry Matched Router MAC\n");
@@ -325,6 +391,11 @@ int main() {
     exit(1);
   }
 
+  // Point global config value (routerip) to read value.
+  router_ip = routerip;
+  // Point global config value (routermac) to read value.
+  router_mac = routermac;
+
   // Set threshold based on configuration.
   if (strcmp(thold, "Strict") == 0) {
     threshold = 1;
@@ -358,12 +429,13 @@ int main() {
   printf("Interface Card: %s\n", interfaces->name);
   // Verify configuration
   printf("Threshold: %s\n", thold);
-  printf("Router IP: %s\n", routerip);
-  printf("Router MAC: %s\n", routermac);
+  printf("Router IP: %s\n", router_ip);
+  printf("Router MAC: %s\n", router_mac);
   printf("Server: %s\n", server);
   printf("Server Port: %lu\n", server_port);
   printf("Configuration Port: %lu\n", config_port);
 
+  /*
   // Open interface to listen on.
   if ((nic_descr = pcap_open_live(interfaces->name, BUFSIZ, 1, -1, error)) == NULL) {
 		printf("pcap_open_live(): %s\n", error);
@@ -401,7 +473,7 @@ int main() {
     fprintf(stderr, "Can't connect to server\n");
     perror("connect");
     exit(1);
-  }
+  } */
 
   // Setup the Callback Structure
   cbs->routerip = routerip;
@@ -413,23 +485,29 @@ int main() {
   #endif
 
   // Start threads.
-  pthread_create(&decrement_thread, NULL, decrement_monitor_count, NULL);
+  //pthread_create(&decrement_thread, NULL, decrement_monitor_count, NULL);
   pthread_create(&configuration_thread, NULL, configuration_interface, NULL);
 
+  while (1) {
+
+  }
+
   // Handle the ARP table.
-  handle_arp_table(routerip, routermac);
+  //handle_arp_table(routerip, routermac);
 
   // Start the capture session
-  pcap_loop(nic_descr, 0, handle_arp_traffic, (u_char*)(cbs));
+  //pcap_loop(nic_descr, 0, handle_arp_traffic, (u_char*)(cbs));
 
   // Stop threads and free memory.
-  pthread_kill(decrement_thread, SIGUSR1);
+  //pthread_kill(decrement_thread, SIGUSR1);
   pthread_kill(configuration_thread, SIGUSR1);
-  pcap_freealldevs(interfaces);
+  //pcap_freealldevs(interfaces);
   free(cport);
   free(thold);
   free(routerip);
+  free(router_ip);
   free(routermac);
+  free(router_mac);
   free(server);
   free(cbs);
   close(sd);

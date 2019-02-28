@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import { Link, Route, Switch } from 'react-router-dom';
 import Home from './Routes/Home/Home';
 import Host from './Routes/Host/Host';
-import Secret from './Routes/Secret/Secret';
+import Configuration from './Routes/Configuration/Configuration';
 import Login from './Routes/Login/Login';
 import withAuth from './withAuth';
 import { Navbar, Nav } from 'react-bootstrap';
@@ -26,7 +26,7 @@ export default class App extends React.Component {
             <Navbar.Collapse id="basic-navbar-nav">
               <Nav className="mr-auto">
                 <Nav.Link ><Link to="/">Home</Link></Nav.Link>
-                <Nav.Link ><Link to="/secret">Secret</Link></Nav.Link>
+                <Nav.Link ><Link to="/Configuration">Configuration</Link></Nav.Link>
                 <Nav.Link ><Link to="/login">Login</Link></Nav.Link>
               </Nav>
             </Navbar.Collapse>
@@ -36,7 +36,7 @@ export default class App extends React.Component {
         <Switch>
           <Route path="/" exact component={withAuth(Home)} />
           <Route path="/Host/:ip" component={withAuth(Host)} />
-          <Route path="/secret" component={withAuth(Secret)} />
+          <Route path="/Configuration" component={withAuth(Configuration)} />
           <Route path="/login" component={Login} />
         </Switch>
       </div>

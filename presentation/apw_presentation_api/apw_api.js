@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const fs  = require('fs');
 const lineReader = require('readline');
 const mysql = require('mysql');
+const net = require('net');
 
 const withAuth = require('./auth_layer');
 const app = express();
@@ -39,7 +40,6 @@ app.get('/api/home', function(req, res) {
 
   for (var i = 0; i < lines.length; i++) {
     tokens = lines[i].split(" ");
-    console.log(lines);
     ips.push({ ip: tokens[0] });
   }
 
@@ -118,6 +118,55 @@ app.put('/api/changestatus', withAuth, function(req, res) {
 
 app.get('/api/secret', withAuth, function(req, res) {
   res.send('You are successfully validated');
+});
+
+app.post('/api/configuration', withAuth, function(req, res) {
+  var client = new net.Socket();
+  buf1 = Buffer.alloc(1024);
+  message = {};
+  config_changes = {};
+  ips = [];
+
+  if (req.body.router_mac === "") {
+    config_changes.router_mac = "Empty";
+  } else {
+    config_changes.router_mac = req.body.router_mac;
+  }
+  if (req.body.router_ip === "") {
+    config_changes.router_ip = "Empty";
+  } else {
+    config_changes.router_ip = req.body.router_ip;
+  }
+  config_changes.threshold = req.body.threshold;
+
+  var lines = fs.readFileSync('/home/brandondg/Documents/BTECH_T4/COMP8045/ARPPoisonWall/server/identification.conf', 'utf-8')
+    .split('\n')
+    .filter(Boolean);
+
+  message.password = "password1";
+  message.payload = config_changes;
+
+  for (var i = 0; i < lines.length; i++) {
+    tokens = lines[i].split(" ");
+    ips.push(tokens[0]);
+  }
+
+  // TODO::
+  // We will only establish a connection to ips[2] (127.0.0.1)
+  // to test. Later these values will be placed into the loop above
+  // tokens[0] will be the IP to configure, and tokens[1] are the
+  // password, will need to update password between sending.
+  client.connect(8045, '127.0.0.1', function() {
+  	console.log('Connected');
+    buf1.write(JSON.stringify(message));
+  	client.write(buf1);
+  });
+
+  client.on('close', function() {
+  	console.log('Connection closed');
+  });
+
+  res.sendStatus(200);
 });
 
 app.post('/api/authenticate', function(req, res) {
