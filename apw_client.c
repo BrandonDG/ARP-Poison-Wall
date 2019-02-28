@@ -27,6 +27,7 @@ size_t config_port   = 0;
 size_t server_port   = 0;
 char   *router_ip;
 char   *router_mac;
+char   *server_ip;
 
 // TODO: put this as a config value
 const char* pw = "password1";
@@ -96,8 +97,7 @@ void* configuration_interface() {
 	bzero((char *)&client_interface, sizeof(struct sockaddr_in));
 	client_interface.sin_family = AF_INET;
 	client_interface.sin_port = htons(config_port);
-  // TODO: Change it to only accept connections from server
-	client_interface.sin_addr.s_addr = htonl(INADDR_ANY); // Accept connections from any client
+	client_interface.sin_addr.s_addr = htonl(INADDR_ANY);
 
   if (bind(sd, (struct sockaddr *)&client_interface, sizeof(client_interface)) == -1) {
     fprintf(stderr, "Can't bind name to socket\n");
@@ -116,60 +116,60 @@ void* configuration_interface() {
       return NULL;
     }
 
-    bp = buf;
-		bytes_to_read = MAXLEN;
-		while ((n = recv(new_sd, bp, bytes_to_read, MSG_WAITALL)) < MAXLEN) {
-			bp += n;
-			bytes_to_read -= n;
-		}
-    #ifdef DEBUG
-    printf("configuration_interface: Configuration Thread Received = %s\n", buf);
-    #endif
-    printf("configuration_interface: Configuration Thread Received = %s\n", buf);
+    if (strcmp(server_ip, inet_ntoa(server_interface.sin_addr)) == 0) {
+      printf("%s\n", "Accepting connection from server");
+      bp = buf;
+  		bytes_to_read = MAXLEN;
+  		while ((n = recv(new_sd, bp, bytes_to_read, MSG_WAITALL)) < MAXLEN) {
+  			bp += n;
+  			bytes_to_read -= n;
+  		}
+      #ifdef DEBUG
+      printf("configuration_interface: Configuration Thread Received = %s\n", buf);
+      #endif
 
-    token = strtok(buf, "\"");
-    while ( token != NULL ) {
-      if (t_count == 3) {
-        strcpy(rpw, token);
-      } else if (t_count == 9) {
-        strcpy(mac, token);
-      } else if (t_count == 13) {
-        strcpy(ip, token);
-      } else if (t_count == 17) {
-        strcpy(th, token);
-      }
-      token = strtok(NULL, "\"");
-      ++t_count;
-    }
-    // apw_client_configuration.conf
-
-    printf("%s\n %s\n %s\n %s\n", rpw, mac, ip, th);
-
-    if (strcmp(rpw, pw) == 0) {
-      printf("Communication Accepted\n");
-      if (strcmp(mac, "Empty") != 0) {
-        router_mac = mac;
-        printf("Set MAC value: %s\n", router_mac);
-        replace_config_value(cc_buffer, "RouterMAC", "RouterMAC ", router_mac, "apw_client_configuration.conf");
-      }
-      if (strcmp(ip, "Empty") != 0) {
-        router_ip = ip;
-        printf("Set IP value: %s\n", router_ip);
-        replace_config_value(cc_buffer, "RouterIP", "RouterIP ", router_ip, "apw_client_configuration.conf");
+      token = strtok(buf, "\"");
+      while ( token != NULL ) {
+        if (t_count == 3) {
+          strcpy(rpw, token);
+        } else if (t_count == 9) {
+          strcpy(mac, token);
+        } else if (t_count == 13) {
+          strcpy(ip, token);
+        } else if (t_count == 17) {
+          strcpy(th, token);
+        }
+        token = strtok(NULL, "\"");
+        ++t_count;
       }
 
-      if (strcmp(th, "Strict") == 0) {
-        printf("Set Strict\n");
-        threshold = 1;
-      } else if (strcmp(th, "Normal") == 0) {
-        printf("Set Normal\n");
-        threshold = 4;
-      } else if (strcmp(th, "Lenient") == 0) {
-        printf("Set Lenient\n");
-        threshold = 7;
-      }
+      printf("%s\n %s\n %s\n %s\n", rpw, mac, ip, th);
 
-      replace_config_value(cc_buffer, "Threshold", "Threshold ", th, "apw_client_configuration.conf");
+      if (strcmp(rpw, pw) == 0) {
+        printf("Communication Accepted\n");
+        if (strcmp(mac, "Empty") != 0) {
+          router_mac = mac;
+          printf("Set MAC value: %s\n", router_mac);
+          replace_config_value(cc_buffer, "RouterMAC", "RouterMAC ", router_mac, "apw_client_configuration.conf");
+        }
+        if (strcmp(ip, "Empty") != 0) {
+          router_ip = ip;
+          printf("Set IP value: %s\n", router_ip);
+          replace_config_value(cc_buffer, "RouterIP", "RouterIP ", router_ip, "apw_client_configuration.conf");
+        }
+
+        if (strcmp(th, "Strict") == 0) {
+          printf("Set Strict\n");
+          threshold = 1;
+        } else if (strcmp(th, "Normal") == 0) {
+          printf("Set Normal\n");
+          threshold = 4;
+        } else if (strcmp(th, "Lenient") == 0) {
+          printf("Set Lenient\n");
+          threshold = 7;
+        }
+        replace_config_value(cc_buffer, "Threshold", "Threshold ", th, "apw_client_configuration.conf");
+      }
     }
 
     close(new_sd);
@@ -395,6 +395,8 @@ int main() {
   router_ip = routerip;
   // Point global config value (routermac) to read value.
   router_mac = routermac;
+  // Point global config value (server) to read value.
+  server_ip = server;
 
   // Set threshold based on configuration.
   if (strcmp(thold, "Strict") == 0) {
@@ -509,6 +511,7 @@ int main() {
   free(routermac);
   free(router_mac);
   free(server);
+  free(server_ip);
   free(cbs);
   close(sd);
 
