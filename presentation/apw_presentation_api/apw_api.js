@@ -173,11 +173,22 @@ app.post('/api/authenticate', function(req, res) {
   console.log(req.body);
   const { email, password } = req.body;
   const payload = { email };
-  const token = jwt.sign(payload, secret, {
-    expiresIn: '1h'
+
+  // TODO: PUT IN SOME VALIDATIONS AND CHECKS
+
+  query = "SELECT * FROM users WHERE username = ? AND password = ?";
+  connection.query(query, [email, password], function(error, results, field) {
+    if (error) throw error;
+    if (results[0] != undefined) {
+      const token = jwt.sign(payload, secret, {
+        expiresIn: '1h'
+      });
+      res.cookie('token', token, { httpOnly: true })
+        .sendStatus(200);
+    } else {
+      res.sendStatus(403);
+    }
   });
-  res.cookie('token', token, { httpOnly: true })
-    .sendStatus(200);
 });
 
 app.get('/checkToken', withAuth, function(req, res) {

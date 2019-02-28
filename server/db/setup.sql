@@ -4,6 +4,7 @@ USE arp_poison_db;
 
 DROP TABLE IF EXISTS alerts;
 DROP TABLE IF EXISTS logs;
+DROP TABLE IF EXISTS users;
 
 CREATE TABLE alerts (
   alertid VARCHAR(18) NOT NULL,
@@ -21,6 +22,13 @@ CREATE TABLE logs (
   to_a   VARCHAR(15) NOT NULL,
   time_s DATETIME    NOT NULL,
   PRIMARY KEY(logid)
+);
+
+CREATE TABLE users (
+  userid   INT         AUTO_INCREMENT,
+  username VARCHAR(30) NOT NULL,
+  password VARCHAR(30) NOT NULL,
+  PRIMARY KEY(userid)
 );
 
 INSERT INTO alerts (alertid, from_a, to_a, start_t, end_t, status)
@@ -54,6 +62,9 @@ INSERT INTO logs (from_a, to_a, time_s)
 INSERT INTO logs (from_a, to_a, time_s)
   VALUES ('192.168.0.11', '192.168.0.22', '2018-02-06 05:08:12');
 
+INSERT INTO users (username, password)
+  VALUES ('a@a.a', 'P@$$w0rd');
 
 SELECT * FROM alerts;
 SELECT * FROM logs;
+SELECT * FROM users;
