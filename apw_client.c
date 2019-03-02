@@ -28,10 +28,9 @@ size_t server_port   = 0;
 char   *router_ip;
 char   *router_mac;
 char   *server_ip;
+char   *pw;
 
-// TODO: put this as a config value
-const char* pw = "password1";
-// TODO: put filename in config value
+char key[] = "hW)V,>I>)Bh(T9";
 
 // arp_header struct to parse arp packets.
 struct arp_header {
@@ -53,6 +52,12 @@ struct callback_struct {
   char *routermac;
   int sd;
 };
+
+void xor_message(char *input, char *output) {
+	for(size_t i = 0; i < strlen(input); i++) {
+		output[i] = input[i] ^ key[i % (sizeof(key)/sizeof(char))];
+	}
+}
 
 // Thread method to decrement monitor_count.
 void* decrement_monitor_count() {
@@ -81,11 +86,11 @@ void replace_config_value(char *buffer, char *find, char *replace1, char *replac
 // Thread method to accomodate configuration changes.
 void* configuration_interface() {
   int sd, new_sd, n, bytes_to_read, t_count;
-  char buf[MAXLEN], *bp, *token;
+  char buf[MAXLEN], dbuf[MAXLEN], *bp, *token;
   struct sockaddr_in client_interface, server_interface;
   socklen_t server_i_len;
 
-  char th[20], ip[20], mac[20], rpw[20], cc_buffer[50];
+  char th[20], ip[20], mac[20], rpw[20], npw[30], cc_buffer[50];
 
   // Create socket.
   if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -128,7 +133,10 @@ void* configuration_interface() {
       printf("configuration_interface: Configuration Thread Received = %s\n", buf);
       #endif
 
-      token = strtok(buf, "\"");
+      xor_message(buf, dbuf);
+      printf("configuration_interface: Configuration Thread Received = %s\n", dbuf);
+
+      token = strtok(dbuf, "\"");
       while ( token != NULL ) {
         if (t_count == 3) {
           strcpy(rpw, token);
@@ -138,14 +146,17 @@ void* configuration_interface() {
           strcpy(ip, token);
         } else if (t_count == 17) {
           strcpy(th, token);
+        } else if (t_count == 21) {
+          strcpy(npw, token);
         }
         token = strtok(NULL, "\"");
         ++t_count;
       }
 
-      printf("%s\n %s\n %s\n %s\n", rpw, mac, ip, th);
+      printf("%s\n %s\n %s\n %s\n %s\n", rpw, mac, ip, th, npw);
 
       if (strcmp(rpw, pw) == 0) {
+        /*
         printf("Communication Accepted\n");
         if (strcmp(mac, "Empty") != 0) {
           router_mac = mac;
@@ -156,6 +167,11 @@ void* configuration_interface() {
           router_ip = ip;
           printf("Set IP value: %s\n", router_ip);
           replace_config_value(cc_buffer, "RouterIP", "RouterIP ", router_ip, "apw_client_configuration.conf");
+        }
+        if (strcmp(npw, "Empty") != 0) {
+          pw = npw;
+          printf("Set PW value: %s\n", pw);
+          replace_config_value(cc_buffer, "Password", "Password ", pw, "apw_client_configuration.conf");
         }
 
         if (strcmp(th, "Strict") == 0) {
@@ -169,6 +185,7 @@ void* configuration_interface() {
           threshold = 7;
         }
         replace_config_value(cc_buffer, "Threshold", "Threshold ", th, "apw_client_configuration.conf");
+        */
       }
     }
 
@@ -241,21 +258,31 @@ void handle_arp_traffic(u_char *ptrnull, const struct pcap_pkthdr *pkt_info, con
       struct tm tm = *localtime(&t);
 
       // This is where we know there is something bad happening.
-      char lbuf[MAXLEN], timestamp[MAXLEN], abuf[MAXLEN];
+      char sbuf[MAXLEN], timestamp[MAXLEN], ebuf[MAXLEN];
+      memset(ebuf, 0x0, MAXLEN);
+      memset(sbuf, 0x0, MAXLEN);
       sprintf(timestamp, "%4d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-      sprintf(lbuf, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
+      sprintf(sbuf, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
     	   pw, "log", timestamp, macStr, my_ip);
-      printf("%s\n", lbuf);
-      send(cbs->sd, lbuf, strlen(lbuf), 0);
+      printf("%s\n", sbuf);
+
+      xor_message(sbuf, ebuf);
+      send(cbs->sd, ebuf, strlen(ebuf), 0);
       printf("Issue Log\n");
+      memset(ebuf, 0x0, MAXLEN);
+      memset(sbuf, 0x0, MAXLEN);
+
       sleep(1);
       ++monitor_count;
       if (monitor_count > threshold) {
         printf("Issue Alert\n");
-        sprintf(abuf, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
+        sprintf(sbuf, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
       	   pw, "alert", timestamp, macStr, my_ip);
-        printf("%s\n", abuf);
-        send(cbs->sd, abuf, strlen(abuf), 0);
+        printf("%s\n", sbuf);
+
+        xor_message(sbuf, ebuf);
+        send(cbs->sd, ebuf, strlen(ebuf), 0);
+
       }
     }
   }
@@ -333,6 +360,7 @@ void handle_arp_table(char *routerip, char *routermac) {
 // Main.
 int main() {
   char *cport, *thold, *routerip, *routermac, *server, *token, *s_port;
+  char *password;
   char fbuf[MAXLEN], error[PCAP_ERRBUF_SIZE];
   struct bpf_program fp;
   struct callback_struct *cbs;
@@ -381,6 +409,10 @@ int main() {
       token = strtok(NULL, " ");
       s_port = malloc(sizeof(char) * (strlen(token) + 1));
       read_config(s_port, token);
+    } else if (strcmp(token, "Password") == 0) {
+      token = strtok(NULL, " ");
+      password = malloc(sizeof(char) * (strlen(token) + 1));
+      read_config(password, token);
     }
   }
 
@@ -397,6 +429,8 @@ int main() {
   router_mac = routermac;
   // Point global config value (server) to read value.
   server_ip = server;
+  // Point global config value (password) to read value.
+  pw = password;
 
   // Set threshold based on configuration.
   if (strcmp(thold, "Strict") == 0) {
@@ -431,13 +465,13 @@ int main() {
   printf("Interface Card: %s\n", interfaces->name);
   // Verify configuration
   printf("Threshold: %s\n", thold);
+  printf("Password: %s\n", pw);
   printf("Router IP: %s\n", router_ip);
   printf("Router MAC: %s\n", router_mac);
   printf("Server: %s\n", server);
   printf("Server Port: %lu\n", server_port);
   printf("Configuration Port: %lu\n", config_port);
 
-  /*
   // Open interface to listen on.
   if ((nic_descr = pcap_open_live(interfaces->name, BUFSIZ, 1, -1, error)) == NULL) {
 		printf("pcap_open_live(): %s\n", error);
@@ -475,7 +509,7 @@ int main() {
     fprintf(stderr, "Can't connect to server\n");
     perror("connect");
     exit(1);
-  } */
+  }
 
   // Setup the Callback Structure
   cbs->routerip = routerip;
@@ -490,12 +524,12 @@ int main() {
   //pthread_create(&decrement_thread, NULL, decrement_monitor_count, NULL);
   pthread_create(&configuration_thread, NULL, configuration_interface, NULL);
 
-  while (1) {
-
-  }
-
   // Handle the ARP table.
   //handle_arp_table(routerip, routermac);
+
+  while (1) {
+    
+  }
 
   // Start the capture session
   //pcap_loop(nic_descr, 0, handle_arp_traffic, (u_char*)(cbs));
@@ -503,7 +537,7 @@ int main() {
   // Stop threads and free memory.
   //pthread_kill(decrement_thread, SIGUSR1);
   pthread_kill(configuration_thread, SIGUSR1);
-  //pcap_freealldevs(interfaces);
+  pcap_freealldevs(interfaces);
   free(cport);
   free(thold);
   free(routerip);
@@ -512,6 +546,8 @@ int main() {
   free(router_mac);
   free(server);
   free(server_ip);
+  free(password);
+  free(pw);
   free(cbs);
   close(sd);
 

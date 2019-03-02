@@ -30,6 +30,7 @@ var connection = mysql.createConnection({
 
 var raw_config = fs.readFileSync("server_conf.json");
 var config = JSON.parse(raw_config);
+var key = "hW)V,>I>)Bh(T9\0"
 //console.log(config.key);
 
 /*
@@ -43,6 +44,7 @@ function enter_log(payload) {
 } */
 
 function enter_log(mysql_connection, log_json) {
+  console.log("Enter Log: " + log_json.TimeStamp);
   var date = new Date(log_json.TimeStamp);
   var time_s = date.toISOString().replace(/T/, ' ').replace(/\..+/, '');
   query = 'INSERT INTO logs (from_a, to_a, time_s) VALUES (?, ?, ?);'
@@ -64,6 +66,9 @@ function enter_alert(mysql_connection, alert_json) {
       query2 = 'INSERT INTO alerts (alertid, from_a, to_a, start_t, end_t, status) VALUES (?, ?, ?, ?, ?, ?);'
       mysql_connection.query(query2, [uniqid(), alert_json.From, alert_json.To, start_t, end_t, "Active"], function(error, results, field) {
         if (error) throw error;
+        // TODO: When doing 100% testing, uncomment this. Do not
+        // want emails sent right now.
+        /*
         mailOptions.subject = "ARP Poison Attack";
         mailOptions.text = "ARP Poison Attack in Progress from attacker "
             + alert_json.From + " to host " + alert_json.To + " at time " + end_t;
@@ -73,7 +78,7 @@ function enter_alert(mysql_connection, alert_json) {
           } else {
             console.log('Email sent: ' + info.response);
           }
-        });
+        }); */
       });
     } else {
       console.log('Alert already exists: ', results[0].alertid);
@@ -84,20 +89,31 @@ function enter_alert(mysql_connection, alert_json) {
   });
 }
 
+function xor_message(input) {
+	var output = [];
+	for (var i = 0; i < input.length; i++) {
+		var charCode = input.charCodeAt(i) ^ key[i % key.length].charCodeAt(0);
+		output.push(String.fromCharCode(charCode));
+	}
+	return output.join("");
+}
+
 connection.connect();
 net.createServer(socket => {
   socket.on('data', function(data) {
     buf1 = Buffer.alloc(1024);
 
     buf1.write(data.toString());
-    console.log('Received: %s', data.toString());
+    //console.log('Received: %s', data.toString());
     //socket.write(buf1);
 
-    //console.log(socket.remoteAddress)
+    console.log(xor_message(data.toString()));
 
+    //console.log(socket.remoteAddress)
+    //var decoded_message = xor_message(data.toString());
     var message;
     try {
-      message = JSON.parse(data.toString());
+      message = JSON.parse(xor_message(data.toString()));
 
       // Hopefully isn't too slow doing it this way.
       var reader_interface = lineReader.createInterface({
@@ -114,7 +130,8 @@ net.createServer(socket => {
             } else if (message.type == "log") {
               console.log("Run log code");
               //console.log(JSON.stringify(message.payload));
-              enter_log((JSON.stringify(message.payload)).concat('\n'));
+              // (JSON.stringify(message.payload)).concat('\n')
+              enter_log(connection, message.payload);
             }
           }
         }
@@ -128,4 +145,4 @@ net.createServer(socket => {
     console.log("Error Occurred")
     console.log(err)
   })
-}).listen(8001
+}).listen(8001)

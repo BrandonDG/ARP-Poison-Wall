@@ -9,7 +9,8 @@ export default class Configuration extends Component {
       message: 'Loading...',
       threshold: 'Strict',
       router_mac: '',
-      router_ip: ''
+      router_ip: '',
+      password: ''
     };
   }
 
@@ -68,6 +69,13 @@ export default class Configuration extends Component {
                             name="router_mac" onChange={this.handleChange} />
               </Form.Group>
             </Col>
+          </Row>
+          <Row>
+            <Form.Group as={Col} controlId="formPassword">
+              <Form.Label>Password</Form.Label>
+              <Form.Control type="password" placeholder="Password"
+                          name="password" onChange={this.handleChange} />
+            </Form.Group>
           </Row>
           <Row>
           <Form.Group as={Col} controlId="formThreshold">

@@ -15,15 +15,22 @@
 #define BUFLEN			1024  	// Buffer length
 
 const char* pw = "password1";
+char key[] = "hW)V,>I>)Bh(T9";
 
 void create_alert_message(char *buffer) {
 	sprintf(buffer, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
-	   pw, "alert", "2018-02-07T16:37:05Z", "192.168.0.10", "192.168.0.22");
+	   pw, "alert", "2018-02-07 16:36:55", "192.168.0.10", "192.168.0.22");
 }
 
 void create_log_message(char *buffer) {
 	sprintf(buffer, "{\"password\": \"%s\", \"type\": \"%s\", \"payload\": {\"TimeStamp\": \"%s\", \"From\": \"%s\", \"To\": \"%s\"}}",
 	   pw, "log", "2018-02-07 16:36:55", "192.168.0.10", "192.168.0.22");
+}
+
+void xor_message(char *input, char *output) {
+	for(size_t i = 0; i < strlen(input); i++) {
+		output[i] = input[i] ^ key[i % (sizeof(key)/sizeof(char))];
+	}
 }
 
 int main (int argc, char **argv) {
@@ -75,7 +82,11 @@ int main (int argc, char **argv) {
 	create_log_message(sbuf);
 	printf("Sending: \n%s\n", sbuf);
 	// Transmit data through the socket
-	send(sd, sbuf, strlen(sbuf), 0);
+	xor_message(sbuf, ebuf);
+	send(sd, ebuf, strlen(ebuf), 0);
+	//memset(ebuf, 0x0, sizeof(ebuf));
+	//memset(sbuf, 0x0, sizeof(sbuf));
+	/*
 	printf("Receive:\n");
 	bp = rbuf;
 	bytes_to_read = BUFLEN;
@@ -85,14 +96,19 @@ int main (int argc, char **argv) {
 		bp += n;
 		bytes_to_read -= n;
 	}
-	printf ("%s\n", rbuf);
+	printf ("%s\n", rbuf); */
 
 	printf("-------\n");
+	sleep(3);
 
 	create_alert_message(sbuf);
 	printf("Sending: \n%s\n", sbuf);
 	// Transmit data through the socket
-	send(sd, sbuf, strlen(sbuf), 0);
+	xor_message(sbuf, ebuf);
+	send(sd, ebuf, strlen(ebuf), 0);
+	memset(ebuf, 0x0, sizeof(ebuf));
+	memset(sbuf, 0x0, sizeof(sbuf));
+	/*
 	printf("Receive:\n");
 	bp = rbuf;
 	bytes_to_read = BUFLEN;
@@ -102,7 +118,7 @@ int main (int argc, char **argv) {
 		bp += n;
 		bytes_to_read -= n;
 	}
-	printf ("%s\n", rbuf);
+	printf ("%s\n", rbuf); */
 
 	fflush(stdout);
 	close (sd);

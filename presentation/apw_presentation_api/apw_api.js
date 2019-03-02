@@ -6,10 +6,12 @@ const fs  = require('fs');
 const lineReader = require('readline');
 const mysql = require('mysql');
 const net = require('net');
+const exec = require('child_process').exec;
 
 const withAuth = require('./auth_layer');
 const app = express();
 
+var key = "hW)V,>I>)Bh(T9\0"
 const secret = 'mysecretsshhh';
 var connection = mysql.createConnection({
   host     : 'localhost',
@@ -23,6 +25,15 @@ app.use(express.json());
 app.use(cookieParser());
 
 connection.connect();
+
+function xor_message(input) {
+	var output = [];
+	for (var i = 0; i < input.length; i++) {
+		var charCode = input.charCodeAt(i) ^ key[i % key.length].charCodeAt(0);
+		output.push(String.fromCharCode(charCode));
+	}
+	return output.join("");
+}
 
 app.get('/', function (req, res) {
  return res.send('Hello world');
@@ -123,6 +134,7 @@ app.get('/api/secret', withAuth, function(req, res) {
 app.post('/api/configuration', withAuth, function(req, res) {
   var client = new net.Socket();
   buf1 = Buffer.alloc(1024);
+  buf2 = Buffer.alloc(1024);
   message = {};
   config_changes = {};
   ips = [];
@@ -138,6 +150,11 @@ app.post('/api/configuration', withAuth, function(req, res) {
     config_changes.router_ip = req.body.router_ip;
   }
   config_changes.threshold = req.body.threshold;
+  if (req.body.password === "") {
+    config_changes.password = "Empty";
+  } else {
+    config_changes.password = req.body.password;
+  }
 
   var lines = fs.readFileSync('/home/brandondg/Documents/BTECH_T4/COMP8045/ARPPoisonWall/server/identification.conf', 'utf-8')
     .split('\n')
@@ -159,8 +176,15 @@ app.post('/api/configuration', withAuth, function(req, res) {
   client.connect(8045, '127.0.0.1', function() {
   	console.log('Connected');
     buf1.write(JSON.stringify(message));
-  	client.write(buf1);
+    buf2.write(xor_message(buf1.toString('ascii')));
+  	client.write(buf2);
   });
+
+  /*
+  var replace = "sed -i '/" + "127.0.0.1" + "/c\\" + "127.0.0.1 " + config_changes.password + "' "
+      + "/home/brandondg/Documents/BTECH_T4/COMP8045/ARPPoisonWall/server/identification.conf";
+  console.log(replace);
+  exec(replace); */
 
   client.on('close', function() {
   	console.log('Connection closed');
